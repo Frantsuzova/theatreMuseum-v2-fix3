@@ -11050,3 +11050,6 @@ body[data-heading="caviar"] #routeDetailTitle{font-weight:700!important}
 .story-image-slider[data-gallery-variant=v2] .gallery-v2-top #infoGalleryV2Counter{display:none}
 .story-image-slider[data-gallery-variant=v2] figcaption{padding:12px 0 0!important}
 .story-image-slider[data-gallery-variant=v2] .gallery-examine{margin-top:8px!important}
+/* v51 — supplied route copy, paragraphs kept intact. */
+#routeText,#routeDetailSubtitle,#drawerRouteText{white-space:pre-line!important}
+#routeDetailTitle,.drawer-route-chip strong{overflow-wrap:normal!important;word-break:normal!important;hyphens:none!important}
