@@ -11361,3 +11361,22 @@ body[data-text-alignment=left] p{word-spacing:normal!important}
 .story-image-slider[data-gallery-variant=v3] .gallery-v3-photo{backface-visibility:hidden;will-change:transform}
 .story-image-slider[data-gallery-variant=v3] .gallery-v3-photo img{backface-visibility:hidden;transform:translateZ(0)!important}
 #infoGalleryFullscreen .info-gallery-fullscreen-photo{transition:none!important;animation:none!important;transform:none!important}
+/* v63 — fixed proportions, sufficiently large counter-rotating image surfaces. */
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-grid{grid-template-columns:repeat(8,minmax(0,1fr))!important;grid-template-rows:repeat(8,minmax(0,1fr))!important}
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-item{transform-origin:center;will-change:transform;backface-visibility:hidden}
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-photo{width:var(--tile-cover,200%)!important;height:var(--tile-cover,200%)!important;max-width:none!important;max-height:none!important}
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-photo img{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:cover!important}
+/* Root-level viewer escapes transformed sheets and iOS overflow clipping. */
+body>#infoGalleryFullscreen{position:fixed!important;inset:0!important;width:100%!important;height:100dvh!important;max-height:none!important;max-width:none!important;min-height:0!important;margin:0!important;padding:max(64px,calc(env(safe-area-inset-top) + 54px)) 16px max(20px,env(safe-area-inset-bottom))!important;z-index:2147483000!important;border:0!important;border-radius:0!important;overflow:hidden!important;transform:none!important;filter:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:#151515!important}
+body>#infoGalleryFullscreen #infoGalleryClose{top:max(14px,env(safe-area-inset-top))!important;right:max(14px,env(safe-area-inset-right))!important;z-index:2147483001!important}
+body>#infoGalleryFullscreen .info-gallery-fullscreen-photo{flex:1 1 0!important;min-height:0!important;width:100%!important;height:0!important;object-fit:contain!important;position:static!important;transform:none!important}
+body>#infoGalleryFullscreen #infoGalleryFullscreenCaption{display:block!important;flex:0 0 auto!important;width:min(100%,760px)!important;margin:0 auto!important;padding:0!important;color:#fff0d4!important;font:15px/1.45 var(--body-font)!important}
+@media(prefers-reduced-motion:reduce){.story-image-slider[data-gallery-variant=v3] .gallery-v3-item{transform:none!important;will-change:auto}}
+
+/* v64 — one shared, breathing mosaic; focus changes its layout, never its depth. */
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-grid{display:block!important;height:auto!important;aspect-ratio:1}
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-item{position:absolute!important;margin:0!important;transform:none!important;z-index:auto!important;transition:none!important;animation:none!important;box-shadow:none!important;will-change:auto}
+@media(prefers-reduced-motion:reduce){
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-grid{display:grid!important}
+.story-image-slider[data-gallery-variant=v3] .gallery-v3-item{position:relative!important;left:auto!important;top:auto!important;width:auto!important;height:auto!important}
+}
