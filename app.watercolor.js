@@ -537,8 +537,8 @@ function renderPointStory(){
        <div class="story-end-mark" aria-hidden="true"><span></span><i></i><span></span></div>
      </section>
    </article>`;
- pointStoryScroll.scrollTop=0;
- requestAnimationFrame(()=>{updatePointStoryHint();observeStorySections(pointStoryScroll);normalizeArrowButtons(pointStoryScroll);});
+ pointStoryScroll.scrollTo({top:0,behavior:"instant"});
+ requestAnimationFrame(()=>{updatePointStoryHint();observeStorySections(pointStoryScroll);updateReadingPosition();normalizeArrowButtons(pointStoryScroll);});
 }
 function closePointOverlay(overlay){
  if(!overlay) return;
@@ -561,7 +561,57 @@ const walkGuideModal=$('walkGuideModal'),routeDetailModal=$('routeDetailModal');
 function openContentModal(modal){if(!modal)return;modal.hidden=false;modal.removeAttribute('hidden');modal.setAttribute('aria-hidden','false');if(modal.id==='walkGuideModal')modal.querySelector('.walk-guide-scroll').scrollTop=0;requestAnimationFrame(()=>modal.classList.add('open'));}
 function closeContentModal(modal){if(!modal)return;modal.classList.remove('open');modal.setAttribute('aria-hidden','true');setTimeout(()=>{if(!modal.classList.contains('open'))modal.hidden=true},460);}
 function renderRouteDetail(){const r=route();routeDetailModal?.style.setProperty('--active-route-color',r.color);$('routeDetailKicker').textContent=`${r.colorName} · маршрут ${String(r.id).padStart(2,'0')}`;$('routeDetailTitle').innerHTML=r.id===1?'Римский-Корсаков<br>— Шаляпин':r.id===2?'Прогулка<br>с Дягилевым':r.name;$('routeDetailSubtitle').textContent=r.id===2?r.blurb:r.blurb.split(',')[0].replace(/\.$/,'')+'.';$('routeStart').textContent=r.points[0].name;$('routeEnd').textContent=r.points.at(-1).name;$('routeDetailLong').innerHTML='';$('routeContextCopy').innerHTML=(r.contextParagraphs||[r.blurb]).map(text=>'<p>'+text+'</p>').join('');renderRouteCast();requestAnimationFrame(()=>observeStorySections(routeDetailModal));}
-let infoGalleryVariant=localStorage.getItem("theatre-gallery-variant")==="v1"?"v1":"v2";
+let infoGalleryVariant=["v1","v2","v3"].includes(localStorage.getItem("theatre-gallery-variant-v55"))?localStorage.getItem("theatre-gallery-variant-v55"):"v3";
+let quoteVariantMode=localStorage.getItem('theatre-quote-variant')==='v2'?'v2':'v1';
+const quoteTypingJobs=new WeakMap();
+function prepareQuoteTyping(quote){
+ if(quote.dataset.typingReady)return;
+ const p=quote.querySelector('p');if(!p)return;
+ quote.dataset.typingReady='true';quote.dataset.quoteVariant=quoteVariantMode;
+ const full=p.textContent;quote.dataset.fullText=full;p.textContent='';
+ const accessible=document.createElement('span');accessible.className='visually-hidden';accessible.textContent=full;
+ const layout=document.createElement('span');layout.className='quote-layout';layout.setAttribute('aria-hidden','true');layout.textContent=full;
+ const typed=document.createElement('span');typed.className='quote-typed';typed.setAttribute('aria-hidden','true');
+ const text=document.createElement('span');text.className='quote-typed-text';text.append(document.createTextNode(''));
+ const caret=document.createElement('i');caret.className='quote-typing-caret';typed.append(text,caret);p.append(accessible,layout,typed);
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('aria-hidden','true');svg.classList.add('quote-outline');
+ const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','M98 2H2V91H62V99L76 91');svg.append(path);quote.prepend(svg);
+ pointStoryScroll.querySelectorAll('.quote-compare button[data-quote-variant]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quoteVariant===quoteVariantMode)));
+}
+function completeQuoteTyping(quote){
+ if(!quote)return;const wasTyping=quote.classList.contains('quote-is-typing');const old=quoteTypingJobs.get(quote);if(old)cancelAnimationFrame(old.frame);quoteTypingJobs.delete(quote);
+ const node=quote.querySelector('.quote-typed-text')?.firstChild;if(node)node.nodeValue=quote.dataset.fullText||'';
+ quote.classList.add('quote-outline-drawn');quote.classList.remove('quote-is-typing');quote.dataset.typed='true';if(wasTyping&&!matchMedia('(prefers-reduced-motion: reduce)').matches){quote.classList.remove('quote-imprinted');void quote.offsetWidth;quote.classList.add('quote-imprinted');}
+ const button=pointStoryScroll.querySelector('[data-quote-complete]');if(button)button.hidden=true;
+}
+function playQuoteTyping(quote,replay=false){
+ if(!quote)return;prepareQuoteTyping(quote);if(quote.dataset.typed&&!replay)return;
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches||(!replay&&quote.classList.contains('accent-skipped'))){completeQuoteTyping(quote);return;}
+ const old=quoteTypingJobs.get(quote);if(old)cancelAnimationFrame(old.frame);
+ quote.classList.remove('quote-imprinted');const node=quote.querySelector('.quote-typed-text').firstChild;node.nodeValue='';delete quote.dataset.typed;
+ const outline=quote.querySelector('.quote-outline path'),box=quote.getBoundingClientRect();const pathLength=box.width*1.56+box.height*.97+Math.hypot(box.width*.14,box.height*.08);outline.style.strokeDasharray=pathLength+' '+pathLength;outline.style.strokeDashoffset=String(pathLength);quote.classList.remove('quote-outline-drawn');quote.classList.add('quote-is-typing');void quote.offsetWidth;quote.classList.add('quote-outline-drawn');
+ const button=pointStoryScroll.querySelector('[data-quote-complete]');if(button)button.hidden=false;
+ // Both variants show two full lines before typing. V2 first draws its outline.
+ const letters=Array.from(quote.dataset.fullText||''),leadDelay=quote.dataset.quoteVariant==='v2'?1800:0,delay=leadDelay+650;
+ let seed=0;
+ {
+  const ghost=quote.querySelector('.quote-layout'),textNode=ghost?.firstChild;
+  if(textNode){const range=document.createRange(),top=ghost.getBoundingClientRect().top,line=parseFloat(getComputedStyle(ghost).lineHeight)||32;
+   for(let i=1;i<=textNode.length;i++){range.setStart(textNode,0);range.setEnd(textNode,i);if(range.getBoundingClientRect().bottom>top+line*2+2)break;seed=i;}
+   const prefix=textNode.textContent.slice(0,seed);seed=Array.from(prefix.replace(/\s+\S*$/,' ')).length;
+  }
+ }
+ node.nodeValue=leadDelay?'':letters.slice(0,seed).join('');
+ const times=Array(seed).fill(leadDelay);let elapsed=delay;
+ letters.slice(seed).forEach((letter,index)=>{elapsed+=95;if(/[,—:;]/.test(letter))elapsed+=180;if(/[.!?]/.test(letter))elapsed+=480;times.push(elapsed)});
+ const job={frame:0,start:performance.now(),position:leadDelay?0:seed};quoteTypingJobs.set(quote,job);
+ const tick=now=>{if(!quote.isConnected){quoteTypingJobs.delete(quote);return;}if(!pointStoryOverlay.classList.contains('open')){completeQuoteTyping(quote);return;}
+  const elapsed=now-job.start;let next=job.position;while(next<times.length&&times[next]<=elapsed)next++;
+  if(next!==job.position){job.position=next;node.nodeValue=letters.slice(0,next).join('');}
+  if(next>=letters.length){completeQuoteTyping(quote);return;}job.frame=requestAnimationFrame(tick);
+ };job.frame=requestAnimationFrame(tick);
+}
+
 const infoGalleryState={items:[],activeIndex:0,touchStartX:null};
 function storyGalleryItems(p){
  const source=p.images||[{src:'./assets/gallery-photo-arcade.png',alt:'Иллюстрация прототипа',text:'Материалы для этой точки готовятся.'}];
@@ -570,7 +620,7 @@ function storyGalleryItems(p){
 function renderInfoGallery(){
  const item=infoGalleryState.items[infoGalleryState.activeIndex];if(!item||!pointStoryScroll)return;
  const main=pointStoryScroll.querySelector('#infoGalleryMainImage'),full=pointStoryScroll.querySelector('#infoGalleryFullscreenImage');
- if(main){main.src=item.src;main.alt=item.alt;const orient=()=>{const frame=main.closest('.info-gallery-frame');frame?.classList.toggle('portrait',main.naturalHeight>main.naturalWidth);if(frame&&main.naturalWidth)frame.style.setProperty('--photo-ratio',main.naturalWidth/main.naturalHeight);};main.onload=orient;if(main.complete)orient();}if(full){full.src=item.src;full.alt=item.alt;}
+ if(main){main.src=item.src;main.alt=item.alt;const orient=()=>{const frame=main.closest('.info-gallery-frame');frame?.classList.toggle('portrait',main.naturalHeight>main.naturalWidth);if(frame&&main.naturalWidth)frame.style.setProperty('--photo-ratio',main.naturalWidth/main.naturalHeight);};main.onload=orient;if(main.complete)orient();}if(full){full.src=item.src;full.alt=item.alt;}const fullCaption=pointStoryScroll.querySelector('#infoGalleryFullscreenCaption');if(fullCaption)fullCaption.textContent=item.text;
  const counter=pointStoryScroll.querySelector('#infoGalleryCounter');if(counter)counter.textContent=`${String(infoGalleryState.activeIndex+1).padStart(2,'0')} / ${String(infoGalleryState.items.length).padStart(2,'0')}`;
  const caption=pointStoryScroll.querySelector('#infoGalleryCaption');if(caption)caption.textContent=item.text;const v2Counter=pointStoryScroll.querySelector("#infoGalleryV2Counter");const countFrame=pointStoryScroll.querySelector(".info-gallery-frame");if(countFrame)countFrame.dataset.photoCount=`${infoGalleryState.activeIndex+1} из ${infoGalleryState.items.length}`;if(v2Counter)v2Counter.textContent=`${infoGalleryState.activeIndex+1} из ${infoGalleryState.items.length}`;
  pointStoryScroll.querySelectorAll('[data-info-gallery-index]').forEach((button,index)=>{button.classList.toggle('active',index===infoGalleryState.activeIndex);button.setAttribute('aria-current',index===infoGalleryState.activeIndex?'true':'false');if(index===infoGalleryState.activeIndex)button.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});});
@@ -598,25 +648,27 @@ function renderPointStory(){
  pointStoryScroll.innerHTML=`<article class="story-article info-story-article">
    <div class="story-rule story-rule-first"><span>История места</span><i></i></div>
    <section class="story-section"><div class="story-columns">${intro.map((t,index)=>`<p class="story-prose-block">${t}</p>`).join('')}</div></section>
-   ${isDirection?'<blockquote class="story-quote"><span class="story-quote-mark">“</span><p>В приёмной у директора Императорских театров, князя Волконского, висела огромная картина Айвазовского — «Буря». Сам князь говорил, что она как нельзя лучше передавала обстановку в его ведомстве.</p></blockquote>':''}
+   ${isDirection?'<div class="gallery-compare quote-compare" aria-label="Вариант цитаты"><button type="button" data-quote-variant="v1">V1</button><button type="button" data-quote-variant="v2">V2</button><button type="button" data-quote-complete hidden>Показать целиком</button></div><blockquote class="story-quote"><span class="story-quote-mark">“</span><p>В приёмной у директора Императорских театров, князя Волконского, висела огромная картина Айвазовского — «Буря». Сам князь говорил, что она как нельзя лучше передавала обстановку в его ведомстве.</p></blockquote>':''}
    <div class="story-rule"><span>Галерея</span><i></i></div>
-   <div class="gallery-compare" aria-label="Вариант фотогалереи"><span>Галерея · тест</span><button type="button" data-gallery-variant="v1" aria-pressed="${infoGalleryVariant==='v1'}">V1</button><button type="button" data-gallery-variant="v2" aria-pressed="${infoGalleryVariant==='v2'}">V2</button></div>
+   <div class="gallery-compare" aria-label="Вариант фотогалереи"><span>Галерея</span><button type="button" data-gallery-variant="v1" aria-pressed="${infoGalleryVariant==='v1'}">V1</button><button type="button" data-gallery-variant="v2" aria-pressed="${infoGalleryVariant==='v2'}">V2</button><button type="button" data-gallery-variant="v3" aria-pressed="${infoGalleryVariant==='v3'}">V3</button></div>
    <figure class="story-image-band story-image-slider" data-gallery-variant="${infoGalleryVariant}" aria-label="Фотографии точки">
      <div class="gallery-v2-top"><span>Архив</span><span id="infoGalleryV2Counter">1 из ${infoGalleryState.items.length}</span></div>
      <div class="info-gallery-thumbs" aria-label="Миниатюры фотографий">${infoGalleryState.items.map((item,index)=>`<button type="button" data-info-gallery-index="${index}" class="info-gallery-thumb ${index===0?'active':''}" aria-label="Фото ${index+1}: ${item.alt}"><img src="${item.src}" alt=""></button>`).join('')}</div>
      <div class="info-gallery-body"><div class="info-gallery-frame" data-photo-count="1 из ${infoGalleryState.items.length}"><button class="info-gallery-main" id="infoGalleryOpen" type="button" aria-label="Открыть фотографию в полном размере"><img id="infoGalleryMainImage" src="${infoGalleryState.items[0].src}" alt="${infoGalleryState.items[0].alt}"></button><button class="story-gallery-prev" data-info-gallery-step="-1" type="button" aria-label="Предыдущая фотография">←</button><button class="story-gallery-next" data-info-gallery-step="1" type="button" aria-label="Следующая фотография">→</button></div>
      <figcaption><div class="gallery-caption-top"><span>Архивные материалы</span><span id="infoGalleryCounter">01 / ${String(infoGalleryState.items.length).padStart(2,'0')}</span></div><p id="infoGalleryCaption">${infoGalleryState.items[0].text}</p></figcaption><button type="button" class="gallery-examine" data-gallery-examine><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg>Рассмотреть</button></div>
+     <div class="gallery-v3-stage"><div class="gallery-v3-grid">${infoGalleryState.items.map((item,index)=>`<figure class="gallery-v3-item"><button type="button" data-gallery-open-index="${index}" aria-label="Рассмотреть: ${item.alt}"><span class="gallery-v3-photo"><img src="${item.src}" alt="${item.alt}" loading="lazy"><span class="gallery-v3-loupe" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg></span></span></button><figcaption><span class="gallery-v3-number">${String(index+1).padStart(2,'0')}</span><span>${item.text}</span></figcaption></figure>`).join('')}</div></div>
+     <div class="gallery-v3-captions">${infoGalleryState.items.map((item,index)=>`<button type="button" data-gallery-open-index="${index}"><span>${String(index+1).padStart(2,'0')}</span>${item.text}<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg></button>`).join('')}</div>
    </figure>
    <div class="story-rule story-rule-second"><span>Контекст</span><i></i></div>
    <section class="story-section story-context-section"><div class="story-context-copy">${context.map(t=>`<p>${t}</p>`).join('')}</div></section>
    ${isDirection?'<aside class="story-fact"><span>Интересный факт</span><p>Театральная улица (ныне улица Зодчего Росси) уникальна своим точным следованием античным канонам — её ширина равна высоте зданий её образующих (22 метра), а длина ровно в десять раз больше — 220 метров. Таким образом, улица Зодчего Росси является самой симметричной в мире.</p></aside>':''}
-   <div class="info-gallery-fullscreen" id="infoGalleryFullscreen" hidden><button type="button" class="gallery-full-zoom" data-gallery-zoom aria-label="Увеличить фотографию">＋</button><img class="info-gallery-fullscreen-photo" id="infoGalleryFullscreenImage" src="${infoGalleryState.items[0].src}" alt="${infoGalleryState.items[0].alt}"><button class="info-gallery-close-zone" type="button" id="infoGalleryClose" aria-label="Закрыть фотографию"><span class="info-gallery-close-glyph" aria-hidden="true"></span></button></div>
+   <div class="info-gallery-fullscreen" id="infoGalleryFullscreen" hidden><img class="info-gallery-fullscreen-photo" id="infoGalleryFullscreenImage" src="${infoGalleryState.items[0].src}" alt="${infoGalleryState.items[0].alt}"><p class="info-gallery-full-caption" id="infoGalleryFullscreenCaption">${infoGalleryState.items[0].text}</p><button class="info-gallery-close-zone" type="button" id="infoGalleryClose" aria-label="Закрыть фотографию"><span class="info-gallery-close-glyph" aria-hidden="true"></span></button></div>
  </article>`;
  const fullscreen=pointStoryScroll.querySelector('#infoGalleryFullscreen');
  const fullscreenClose=pointStoryScroll.querySelector('#infoGalleryClose');
  if(fullscreenClose)fullscreenClose.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeInfoGalleryFullscreen();});
  if(fullscreen)fullscreen.addEventListener('click',e=>{if(e.target===fullscreen||e.target.id==='infoGalleryFullscreenImage'){e.preventDefault();e.stopPropagation();closeInfoGalleryFullscreen();}});
- pointStoryScroll.scrollTop=0;const firstImage=pointStoryScroll.querySelector('#infoGalleryMainImage');if(firstImage){const orient=()=>{const frame=firstImage.closest('.info-gallery-frame');frame?.classList.toggle('portrait',firstImage.naturalHeight>firstImage.naturalWidth);if(frame&&firstImage.naturalWidth)frame.style.setProperty('--photo-ratio',firstImage.naturalWidth/firstImage.naturalHeight);};firstImage.onload=orient;if(firstImage.complete)orient();}requestAnimationFrame(()=>{updatePointStoryHint();observeStorySections(pointStoryScroll);normalizeArrowButtons(pointStoryScroll);});
+ pointStoryScroll.scrollTo({top:0,behavior:"instant"});const firstImage=pointStoryScroll.querySelector('#infoGalleryMainImage');if(firstImage){const orient=()=>{const frame=firstImage.closest('.info-gallery-frame');frame?.classList.toggle('portrait',firstImage.naturalHeight>firstImage.naturalWidth);if(frame&&firstImage.naturalWidth)frame.style.setProperty('--photo-ratio',firstImage.naturalWidth/firstImage.naturalHeight);};firstImage.onload=orient;if(firstImage.complete)orient();}requestAnimationFrame(()=>{updatePointStoryHint();observeStorySections(pointStoryScroll);updateReadingPosition();normalizeArrowButtons(pointStoryScroll);});
 }
 
 function loadYandex(){
@@ -854,9 +906,7 @@ function renderGuideStep(){
 }
 document.querySelectorAll('[data-walk-step]').forEach(button=>button.addEventListener('click',()=>{
  guideStep=guideStep===Number(button.dataset.walkStep)?-1:Number(button.dataset.walkStep);renderGuideStep();
- const scroll=$('walkGuideModal').querySelector('.walk-guide-scroll');
- const section=button.closest('.walk-step');
- if(section.offsetTop<scroll.scrollTop || section.offsetTop>scroll.scrollTop+scroll.clientHeight-120)scroll.scrollTo({top:section.offsetTop-scroll.offsetTop,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+ if(guideStep>=0)requestAnimationFrame(()=>revealGuidePanel(button.closest('.walk-step')));
 }));
 renderGuideStep();
 
@@ -912,8 +962,11 @@ if(fullRouteAudio&&fullRoutePlay&&fullRouteSeek){
 }
 if(pointStoryScroll){
  pointStoryScroll.addEventListener('click',e=>{
-   const zoomButton=e.target.closest('[data-gallery-zoom]');if(zoomButton){const full=pointStoryScroll.querySelector('#infoGalleryFullscreen');const zoomed=full.classList.toggle('gallery-zoomed');zoomButton.textContent=zoomed?'−':'＋';zoomButton.setAttribute('aria-label',zoomed?'Уменьшить фотографию':'Увеличить фотографию');return;}
-   const variantButton=e.target.closest('.gallery-compare [data-gallery-variant]');if(variantButton){infoGalleryVariant=variantButton.dataset.galleryVariant;localStorage.setItem('theatre-gallery-variant',infoGalleryVariant);pointStoryScroll.querySelector('.story-image-slider').dataset.galleryVariant=infoGalleryVariant;pointStoryScroll.querySelectorAll('.gallery-compare button').forEach(b=>b.setAttribute('aria-pressed',String(b===variantButton)));return;}
+
+   const variantButton=e.target.closest('.gallery-compare [data-gallery-variant]');if(variantButton){infoGalleryVariant=variantButton.dataset.galleryVariant;localStorage.setItem('theatre-gallery-variant-v55',infoGalleryVariant);pointStoryScroll.querySelector('.story-image-slider').dataset.galleryVariant=infoGalleryVariant;pointStoryScroll.querySelectorAll('.gallery-compare button').forEach(b=>b.setAttribute('aria-pressed',String(b===variantButton)));observeStorySections(pointStoryScroll);return;}
+   const openIndex=e.target.closest('[data-gallery-open-index]');if(openIndex){selectInfoGalleryItem(Number(openIndex.dataset.galleryOpenIndex));const full=pointStoryScroll.querySelector('#infoGalleryFullscreen');full.classList.remove('gallery-zoomed');full.hidden=false;pointStoryOverlay.classList.add('photo-open');requestAnimationFrame(()=>full.classList.add('open'));return;}
+   const quoteVariant=e.target.closest('.quote-compare button[data-quote-variant]');if(quoteVariant){quoteVariantMode=quoteVariant.dataset.quoteVariant;localStorage.setItem('theatre-quote-variant',quoteVariantMode);const quote=pointStoryScroll.querySelector('.story-quote');quote.dataset.quoteVariant=quoteVariantMode;pointStoryScroll.querySelectorAll('.quote-compare button[data-quote-variant]').forEach(b=>b.setAttribute('aria-pressed',String(b===quoteVariant)));playQuoteTyping(quote,true);return;}
+   if(e.target.closest('[data-quote-complete]')){completeQuoteTyping(pointStoryScroll.querySelector('.story-quote'));return;}
    const indexButton=e.target.closest('[data-info-gallery-index]');if(indexButton){selectInfoGalleryItem(indexButton.dataset.infoGalleryIndex);return;}
    const stepButton=e.target.closest('[data-info-gallery-step]');if(stepButton){selectInfoGalleryItem(infoGalleryState.activeIndex+Number(stepButton.dataset.infoGalleryStep));return;}
    if(e.target.closest('#infoGalleryOpen,[data-gallery-examine]')){const full=pointStoryScroll.querySelector('#infoGalleryFullscreen');if(full){pointStoryOverlay.classList.add('photo-open');full.hidden=false;requestAnimationFrame(()=>full.classList.add('open'));}return;}
@@ -1332,8 +1385,44 @@ fitCurtainLogo();
 
 // Reveal once, without changing scroll height; each scroll surface has its own observer.
 const storyObservers=new WeakMap();
+const archiveStartObservers=new WeakMap(),archiveFocusJobs=new WeakMap();
+function setArchiveVisibility(stage,visible){
+ const slider=stage.closest('.story-image-slider');slider.classList.toggle('gallery-motion-visible',visible);
+ let job=archiveFocusJobs.get(stage);
+ if(!job){job={frame:0,elapsed:0,last:0,index:-1,paint:0};archiveFocusJobs.set(stage,job)}
+ if(job.frame){cancelAnimationFrame(job.frame);job.frame=0}job.last=0;
+ if(!visible||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ const grid=stage.querySelector('.gallery-v3-grid'),tiles=[...stage.querySelectorAll('.gallery-v3-item')];
+ const spans=[[1,5,0,3],[5,7,1,3],[0,3,3,6],[3,6,3,6],[6,8,3,5],[1,3,6,8]];
+ const tracks=(start,end,amount)=>{
+  const count=end-start,weight=.70*(8-count)/(.30*count);
+  return Array.from({length:8},(_,i)=>((i>=start&&i<end)?1+(weight-1)*amount:1).toFixed(7)+'fr').join(' ');
+ };
+ const tick=now=>{
+  if(!stage.isConnected||!slider.classList.contains('gallery-motion-visible')){job.frame=0;return;}
+  const paused=document.hidden||pointStoryOverlay.classList.contains('photo-open');
+  if(job.last&&!paused)job.elapsed+=Math.min(80,now-job.last);job.last=now;
+  {job.paint=now;
+   const duration=10000,index=Math.floor(job.elapsed/duration)%tiles.length,phase=(job.elapsed%duration)/duration;
+   let amount=phase<.32?phase/.32:phase<.62?1:phase<.96?1-(phase-.62)/.34:0;
+   amount=Math.max(0,Math.min(1,amount));const eased=amount*amount*(3-2*amount),[x1,x2,y1,y2]=spans[index];
+   // Enlarge the existing tile by redistributing the mosaic tracks. No clone or overlay.
+   grid.style.setProperty('grid-template-columns',tracks(x1,x2,eased),'important');
+   grid.style.setProperty('grid-template-rows',tracks(y1,y2,eased),'important');
+   if(index!==job.index){job.index=index;tiles.forEach((tile,i)=>tile.classList.toggle('gallery-v3-active',i===index));}
+  }
+  job.frame=requestAnimationFrame(tick);
+ };job.frame=requestAnimationFrame(tick);
+}
+function observeArchiveStart(surface){
+ archiveStartObservers.get(surface)?.disconnect();if(!('IntersectionObserver' in window))return;
+ const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{const slider=entry.target.closest('.story-image-slider');if(entry.isIntersecting){slider.classList.add('gallery-motion-started')}setArchiveVisibility(entry.target,entry.isIntersecting)}),{root:surface,threshold:.15});
+ surface.querySelectorAll('.story-image-slider[data-gallery-variant="v3"] .gallery-v3-stage').forEach(stage=>observer.observe(stage));
+ surface.querySelectorAll('.story-image-slider:not([data-gallery-variant="v3"]) .gallery-v3-stage').forEach(stage=>setArchiveVisibility(stage,false));
+ archiveStartObservers.set(surface,observer);
+}
 function observeStorySections(surface){
- if(!surface || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ if(!surface)return;observeArchiveStart(surface);surface.querySelectorAll('.info-story-article .story-quote').forEach(prepareQuoteTyping);if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches){surface.querySelectorAll('.story-quote').forEach(completeQuoteTyping);return;}
  storyObservers.get(surface)?.disconnect();
  const readingRoot=surface.classList.contains('content-modal')?surface.querySelector('.content-modal-scroll'):surface;
  if(readingRoot && !readingRoot.dataset.readingReady){
@@ -1342,15 +1431,17 @@ function observeStorySections(surface){
   let pending=false;const update=()=>{pending=false;const length=readingRoot.scrollHeight-readingRoot.clientHeight;readingRoot.style.setProperty('--reading-progress',length>0?Math.min(1,readingRoot.scrollTop/length):1)};
   readingRoot.addEventListener('scroll',()=>{if(!pending){pending=true;requestAnimationFrame(update)}},{passive:true});update();
  }
- surface.querySelectorAll('.story-quote p').forEach(paragraph=>{
-  if(paragraph.dataset.voicesReady)return;paragraph.dataset.voicesReady='true';
-  const phrases=paragraph.textContent.match(/[^.!?]+[.!?]*\s*/g)||[paragraph.textContent];paragraph.textContent='';
-  phrases.forEach((phrase,index)=>{const span=document.createElement('span');span.className='quote-voice';span.style.setProperty('--voice-index',index);span.textContent=phrase;paragraph.append(span)});
- });
+ surface.querySelectorAll('.info-story-article .story-quote').forEach(prepareQuoteTyping);
+ surface.querySelectorAll('.info-story-article .story-fact').forEach(fact=>{if(!fact.querySelector('.fact-reveal-cover')){const cover=document.createElement('span');cover.className='fact-reveal-cover';cover.setAttribute('aria-hidden','true');fact.append(cover)}});
+ // Keep normal reading static. Animate only the two editorial accents in a point story.
+ surface.querySelectorAll('.story-reveal').forEach(el=>{el.classList.remove('story-reveal');el.classList.add('story-visible')});
  const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{
-  if(entry.isIntersecting){entry.target.classList.add('story-visible');if(entry.target.matches('.story-image-slider,.route-portrait-gallery'))takePhotoEffect(entry.target.querySelector('.info-gallery-frame,.route-gallery-stage'));observer.unobserve(entry.target);}
- }),{root:surface.classList.contains('content-modal')?surface.querySelector('.content-modal-scroll'):surface,threshold:.08});
- surface.querySelectorAll('.story-image-slider,.route-portrait-gallery,.story-rule,.story-quote,.story-fact,.story-section>p,.story-context-copy>p,.route-context-copy>p,.route-audio-note>p,.project-story>p,.drawer-project-essay>p').forEach(el=>{el.classList.add('story-reveal');observer.observe(el);});
+  if(entry.isIntersecting){const top=readingRoot.getBoundingClientRect().top;if(entry.boundingClientRect.top<top+24)entry.target.classList.add('accent-skipped');entry.target.classList.add('accent-visible');if(entry.target.matches('.story-quote')&&!quoteTypingJobs.has(entry.target))playQuoteTyping(entry.target);observer.unobserve(entry.target);}
+ }),{root:readingRoot,rootMargin:`0px 0px -${Math.round((readingRoot?.clientHeight||innerHeight)*.42)}px 0px`,threshold:0});
+ surface.querySelectorAll('.info-story-article .story-quote,.info-story-article .story-fact,.story-image-slider[data-gallery-variant="v3"]').forEach(el=>{
+  if(el.classList.contains('accent-visible'))return;
+  el.classList.add('accent-ready');observer.observe(el);
+ });
  storyObservers.set(surface,observer);
 }
 
@@ -1429,10 +1520,11 @@ function updateReadingPosition(){
  const root=pointStoryScroll.getBoundingClientRect(),anchor=root.top+root.height*.42;
  const heading=pointStoryScroll.querySelector('.story-rule-first>span');
  const paragraphs=[...pointStoryScroll.querySelectorAll('.story-columns p')];
- const target=paragraphs[2]||paragraphs[paragraphs.length-1];
+ const target=paragraphs.find(p=>/^В 1917 году/.test(p.textContent.replace(/\s+/g,' ').trim()))||paragraphs[paragraphs.length-1];
+ paragraphs.forEach(p=>p.toggleAttribute('data-history-finale',p===target));
  const targetRect=target?.getBoundingClientRect();
  const headingRect=heading?.getBoundingClientRect();
- const targetActive=!!targetRect&&targetRect.top<root.top+root.height*.72&&targetRect.bottom>root.top+20;
+ const targetActive=!!targetRect&&targetRect.top<root.bottom-24&&targetRect.bottom>root.top+12;
  paragraphs.forEach(paragraph=>paragraph.classList.toggle('reading-current',paragraph===target&&targetActive));
  heading?.classList.toggle('reading-heading-current',!targetActive&&!!headingRect&&headingRect.bottom>root.top&&headingRect.top<root.bottom);
 
@@ -1459,13 +1551,36 @@ routeDetailModal.addEventListener('click',event=>{
 castPhotoDialog.querySelector('button').addEventListener('click',()=>castPhotoDialog.close());
 castPhotoDialog.addEventListener('click',event=>{if(event.target===castPhotoDialog)castPhotoDialog.close()});
 castPhotoDialog.addEventListener('close',()=>castPhotoTrigger?.focus());
-document.querySelectorAll('[data-project-instruction]').forEach(button=>button.addEventListener('click',()=>{closePrologueMenu();closeDrawer();guideStep=0;guideColombinaSeen=false;renderGuideStep();openContentModal(walkGuideModal)}));
+document.querySelectorAll('[data-project-instruction]').forEach(button=>button.addEventListener('click',event=>{event.preventDefault();closePrologueMenu();closeDrawer();guideStep=0;guideColombinaSeen=false;renderGuideStep();openContentModal(walkGuideModal)}));
 // Escape closes the foreground photo only; keep the underlying route page open.
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&castPhotoDialog.open)event.stopImmediatePropagation()},true);
 
-function syncTextAlignment(){document.querySelectorAll('p,figcaption,.gallery-caption-text').forEach(el=>{el.style.setProperty('text-align',document.body.dataset.heading==='ricordi'?'justify':'left','important');el.style.setProperty('text-align-last','left','important');el.style.setProperty('hyphens','none','important')})}
+function syncTextAlignment(){
+ const justify=document.body.dataset.heading==='ricordi'&&localStorage.getItem('theatre-ricordi-align')==='justify';
+ document.body.dataset.textAlignment=justify?'justify':'left';
+ const control=document.getElementById('alignmentPreviewControl');if(control)control.hidden=document.body.dataset.heading!=='ricordi';
+ const select=document.getElementById('alignmentPreviewToggle');if(select)select.value=justify?'justify':'left';
+ document.querySelectorAll('p,figcaption,.gallery-caption-text').forEach(el=>{
+  el.style.setProperty('text-align',justify?'justify':'left','important');el.style.setProperty('text-align-last','left','important');el.style.setProperty('hyphens','none','important');
+ });
+ polishProse();
+}
+function polishProse(){
+ document.querySelectorAll('p,figcaption,h1,h2,h3,h4,.cast-name,.walk-step-title').forEach(el=>{
+  const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let node;
+  while(node=walker.nextNode()){
+   if(node.parentElement.closest('script,style,select'))continue;
+   const old=node.nodeValue;
+   const next=old.replace(/([\S])[ \t]+([—–])(?=[ \t])/g,'$1\u00a0$2').replace(/(^|[ \t])([А-Яа-яЁё])[ \t]+(?=[А-Яа-яЁё])/g,'$1$2\u00a0').replace(/([А-ЯЁ]\.)[ \t]+(?=[А-ЯЁ])/g,'$1\u00a0');
+   if(next!==old)node.nodeValue=next;
+  }
+ });
+}
 new MutationObserver(syncTextAlignment).observe(document.body,{childList:true,subtree:true});
 syncTextAlignment();
+document.getElementById('alignmentPreviewToggle')?.addEventListener('change',event=>{
+ localStorage.setItem('theatre-ricordi-align',event.target.value);syncTextAlignment();scheduleProjectFit();
+});
 // Reserve only the bottom of the paragraph for the figure; keep its feet grounded.
 let projectFitScheduled=false;
 function fitProjectFloats(){
@@ -1473,10 +1588,11 @@ function fitProjectFloats(){
  document.querySelectorAll('.project-story-v44 .project-story-scene').forEach(scene=>{
   if(!scene.getClientRects().length)return;
   const wrap=scene.querySelector('.project-figure-wrap'),text=scene.querySelector('p');if(!wrap||!text)return;
-  let height=Math.max(218,text.getBoundingClientRect().height),reservedHeight=height;
+  wrap.style.setProperty('--project-float-height','0px');
+  let height=Math.max(188,text.getBoundingClientRect().height),reservedHeight=height;
   for(let n=0;n<8;n++){
    wrap.style.setProperty('--project-float-height',height+'px');
-   const next=Math.max(218,text.getBoundingClientRect().height);
+   const next=Math.max(188,text.getBoundingClientRect().height);
    reservedHeight=Math.max(reservedHeight,next);if(Math.abs(next-height)<1)break;height=next;
   }
   wrap.style.setProperty('--project-float-height',reservedHeight+'px');
@@ -1486,3 +1602,17 @@ function scheduleProjectFit(){if(!projectFitScheduled){projectFitScheduled=true;
 new MutationObserver(scheduleProjectFit).observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','class','data-heading'],childList:true});
 window.addEventListener('resize',scheduleProjectFit,{passive:true});
 document.fonts.addEventListener('loadingdone',scheduleProjectFit);scheduleProjectFit();
+
+window.addEventListener('resize',()=>{if(pointStoryOverlay?.classList.contains('open'))requestAnimationFrame(()=>observeStorySections(pointStoryScroll))},{passive:true});
+
+function revealGuidePanel(section){
+ const root=walkGuideModal.querySelector('.walk-guide-scroll'),panel=section.querySelector('.walk-step-panel'),copy=panel?.querySelector('.walk-step-copy');if(!root||!copy)return;
+ const paragraphs=[...panel.querySelectorAll('.walk-step-copy p')];if(!paragraphs.length)return;const box=root.getBoundingClientRect(),heading=section.querySelector('.walk-step-trigger').getBoundingClientRect(),first=paragraphs[0].getBoundingClientRect(),last=paragraphs.at(-1).getBoundingClientRect(),text={top:first.top,bottom:last.bottom};
+ const end=text.bottom-box.top+root.scrollTop+18,start=heading.top-box.top+root.scrollTop-12;
+ const top=end-start<=root.clientHeight?Math.max(0,Math.min(start,end-root.clientHeight)):Math.max(0,text.top-box.top+root.scrollTop-12);
+ root.scrollTo({top,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+}
+
+// Reveal and one-shot collage motion adapted from the supplied visual references:
+// https://codepen.io/v777999/pen/jOWQdbb
+// https://codepen.io/v777999/pen/JjaGZav
