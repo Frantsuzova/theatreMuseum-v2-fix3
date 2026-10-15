@@ -115,3 +115,7 @@
 #routesScreen .route-detail-primary span{color:var(--active-route-color)!important;font-size:24px!important}
 #routesScreen .route-start-inline{background:var(--active-route-color)!important;color:#172228!important;border:1px solid #17222844!important;font-weight:600!important}
 body[data-heading="caviar"] #routesScreen .route-choice-text em{font-family:'Caviar Dreams',sans-serif!important;font-weight:700!important}
+/* v62: one native vertical scroller, including Android in-app browser tabs. */
+#routesScreen.route-select-screen:not([hidden]){display:block!important;height:100%!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;touch-action:pan-y;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+#routesScreen .route-select-main{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;flex:none!important;margin:0 auto!important}
+#routesScreen .route-select-head{flex:none!important;margin:0 auto!important}
